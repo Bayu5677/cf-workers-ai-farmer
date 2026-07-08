@@ -1,0 +1,12 @@
+# Sensitive files - never commit
+akun.txt
+cf_keys.txt
+.profile_*
+.DS_Store
+*.pyc
+__pycache__/
+*.egg-info/
+dist/
+build/
+venv/
+.env

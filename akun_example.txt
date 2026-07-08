@@ -1,0 +1,7 @@
+# Example accounts file for cf_farmer.py
+# Format: email|password (one per line)
+# Remove # to enable, edit with your actual credentials
+
+# user1@gmail.com|YourPassword123
+# user2@gmail.com|AnotherPass456
+# user3@gmail.com|SecurePass789
