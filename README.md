@@ -37,15 +37,21 @@ pip3 install DrissionPage
 
 Create `akun.txt` with your Gmail accounts (one per line):
 
+**Without proxy (< 20 accounts):**
 ```
 user1@gmail.com|YourPassword123
 user2@gmail.com|AnotherPass456
 user3@gmail.com|SecurePass789
 ```
 
-**Format:** `email|password` (pipe separator, no spaces)
+**With proxy (recommended for 20+ accounts):**
+```
+user1@gmail.com|YourPassword123|socks5://proxy_user:proxy_pass@us.1024proxy.io:1080
+user2@gmail.com|AnotherPass456|socks5://proxy_user:proxy_pass@eu.1024proxy.io:1080
+user3@gmail.com|SecurePass789|socks5://proxy_user:proxy_pass@sg.1024proxy.io:1080
+```
 
-**Note:** Accounts must have Google OAuth enabled for Cloudflare login.
+**Format:** `email|password|proxy` (pipe separator)
 
 ### Step 2: Farm Tokens
 
@@ -58,6 +64,9 @@ xvfb-run python3 cf_farmer.py --only user1@gmail.com
 
 # Custom delay between accounts (default: 10s)
 xvfb-run python3 cf_farmer.py --delay 15
+
+# Run WITHOUT proxy (ignore proxy in akun.txt)
+xvfb-run python3 cf_farmer.py --no-proxy
 ```
 
 **Output:** `cf_keys.txt` with harvested tokens:
@@ -65,6 +74,80 @@ xvfb-run python3 cf_farmer.py --delay 15
 ```
 cloudflare_user1|https://api.cloudflare.com/client/v4/accounts/abc123.../ai/v1|cfut_xxx...|[models]
 cloudflare_user2|https://api.cloudflare.com/client/v4/accounts/def456.../ai/v1|cfut_yyy...|[models]
+```
+
+---
+
+## 🔒 Proxy Setup Guide
+
+### When to Use Proxy
+
+| Accounts | Recommendation | Why |
+|----------|---------------|-----|
+| **1-20 accounts** | ❌ No proxy needed | Datacenter IP works fine |
+| **20-50 accounts** | ⚠️ Residential proxy | Avoid rate limiting |
+| **50-100 accounts** | ✅ Residential proxy | Prevent IP blocks |
+| **100+ accounts** | ✅ Proxy + IP rotation | Required for bulk farming |
+
+### Supported Proxy Formats
+
+```
+socks5://user:pass@host:port    ← Recommended (SOCKS5)
+http://user:pass@host:port      ← HTTP proxy
+socks5://host:port              ← No auth required
+host:port:user:pass             ← Legacy format (auto-converts)
+```
+
+### Recommended Proxy Providers
+
+| Provider | Type | Price | Rotation | Best For |
+|----------|------|-------|----------|----------|
+| **1024proxy.io** | Residential | $0.50/GB | Per-request | Best value |
+| **Bright Data** | Residential | $5.00/GB | Per-request | Enterprise |
+| **Oxylabs** | Residential | $4.00/GB | Per-request | High volume |
+| **IPRoyal** | Residential | $1.50/GB | Per-request | Budget |
+
+### Configure akun.txt with Proxy
+
+Each account can use **different proxy** for maximum stealth:
+
+```
+# US accounts with US proxy
+user1@gmail.com|pass123|socks5://user:pass@us.1024proxy.io:1080
+user2@gmail.com|pass456|socks5://user:pass@us.1024proxy.io:1081
+
+# EU accounts with EU proxy
+user3@gmail.com|pass789|socks5://user:pass@eu.1024proxy.io:1080
+user4@gmail.com|pass101|socks5://user:pass@de.1024proxy.io:1080
+
+# SG accounts with SG proxy
+user5@gmail.com|pass202|socks5://user:pass@sg.1024proxy.io:1080
+```
+
+### Proxy Session Rotation
+
+For **per-request IP rotation**, use session IDs in proxy URL:
+
+```
+# Format: socks5://user-region-session:pass@host:port
+user1@gmail.com|pass123|socks5://user-us-session1:pass@proxy.1024proxy.io:1080
+user2@gmail.com|pass456|socks5://user-us-session2:pass@proxy.1024proxy.io:1080
+```
+
+Each `sessionX` gets a **different IP** from the provider's pool.
+
+### Test Proxy Connection
+
+```bash
+# Test single account with proxy
+xvfb-run python3 cf_farmer.py --only user1@gmail.com
+
+# Expected output:
+# [1] user1@gmail.com
+# [1] CF login...
+#    Proxy: socks5://user:pass@us.1024proxy.io:1080...
+# [2] Google OAuth...
+# [OK] Token: cfut_wDXfn...
 ```
 
 ---
@@ -150,6 +233,7 @@ xvfb-run python3 cf_farmer.py --only test@gmail.com --delay 5
 | `[ERR] Account ID not found` | Dashboard API failed — retry or check account status |
 | `selenium.common.exceptions` | Wrong package — use `DrissionPage`, not Selenium |
 | `DISPLAY not set` | Must run with `xvfb-run` for headless mode |
+| `Proxy connection failed` | Check proxy credentials or switch proxy provider |
 
 ---
 
@@ -159,68 +243,8 @@ xvfb-run python3 cf_farmer.py --only test@gmail.com --delay 5
 
 #### Option A: Auto Inject via REST API (Recommended)
 
-**Script:** `inject_to_9router.py`
-
-```python
-#!/usr/bin/env python3
-import json, subprocess, re
-
-# Dashboard URL
-DASHBOARD = "http://your-9router-host:20128"
-
-# Read tokens from cf_keys.txt
-tokens = []
-with open('cf_keys.txt', 'r') as f:
-    for line in f:
-        if not line.strip():
-            continue
-        parts = line.strip().split('|')
-        if len(parts) >= 3:
-            name = parts[0]
-            url = parts[1]
-            api_key = parts[2]
-            match = re.search(r'/accounts/([a-f0-9]+)/', url)
-            if match:
-                tokens.append({
-                    'name': name,
-                    'apiKey': api_key,
-                    'accountId': match.group(1)
-                })
-
-print(f"Loaded {len(tokens)} tokens")
-
-# Inject via /api/providers
-for i, token in enumerate(tokens, 1):
-    payload = {
-        "provider": "cloudflare-ai",
-        "name": token['name'],
-        "authType": "apikey",
-        "apiKey": token['apiKey'],
-        "providerSpecificData": {"accountId": token['accountId']},
-        "priority": i,
-        "isActive": True
-    }
-    
-    result = subprocess.run([
-        'curl', '-s', '-X', 'POST',
-        f"{DASHBOARD}/api/providers",
-        '-H', 'Content-Type: application/json',
-        '-d', json.dumps(payload)
-    ], capture_output=True, text=True)
-    
-    resp = json.loads(result.stdout)
-    if 'connection' in resp and 'id' in resp['connection']:
-        print(f"✅ [{i}/{len(tokens)}] {token['name']} added")
-    else:
-        print(f"❌ [{i}/{len(tokens)}] {token['name']} failed: {result.stdout[:100]}")
-
-print(f"\n✨ Done! Check dashboard: {DASHBOARD}/dashboard/providers")
-```
-
-**Run:**
-
 ```bash
-# Edit DASHBOARD URL in script first
+# Edit DASHBOARD URL in inject_to_9router.py first
 python3 inject_to_9router.py
 ```
 
@@ -235,3 +259,109 @@ Loaded 10 tokens
 
 ✨ Done! Check dashboard: http://your-host:20128/dashboard/providers
 ```
+
+---
+
+## 📈 Scaling Guide
+
+### Small Scale (1-20 accounts)
+
+**No proxy needed.** Datacenter IP works fine.
+
+```bash
+# akun.txt (no proxy)
+user1@gmail.com|pass123
+user2@gmail.com|pass456
+...
+
+# Run
+xvfb-run python3 cf_farmer.py
+```
+
+**Capacity:** 10k-200k neurons/day
+
+---
+
+### Medium Scale (20-100 accounts)
+
+**Residential proxy recommended.**
+
+```bash
+# akun.txt (with proxy)
+user1@gmail.com|pass123|socks5://user:pass@proxy1.example.com:1080
+user2@gmail.com|pass456|socks5://user:pass@proxy2.example.com:1080
+...
+
+# Run
+xvfb-run python3 cf_farmer.py --delay 15
+```
+
+**Capacity:** 200k-1M neurons/day
+
+---
+
+### Large Scale (100+ accounts)
+
+**Residential proxy mandatory** + IP rotation per account.
+
+```bash
+# akun.txt (unique session per account)
+user1@gmail.com|pass123|socks5://user-session1:pass@proxy.example.com:1080
+user2@gmail.com|pass456|socks5://user-session2:pass@proxy.example.com:1080
+...
+
+# Run with longer delay
+xvfb-run python3 cf_farmer.py --delay 20
+```
+
+**Capacity:** 1M+ neurons/day
+
+---
+
+## 🛡️ Security Notes
+
+- **Never commit `akun.txt`** to Git (already in `.gitignore`)
+- **Tokens are sensitive** — treat like passwords
+- **Rotate tokens** if compromised (delete + re-run harvester)
+- **Use App Passwords** if 2FA enabled on Gmail
+- **Proxy credentials** should be kept secure
+
+---
+
+## 📋 Files Structure
+
+```
+cf-workers-ai-farmer/
+├── README.md              # This file
+├── cf_farmer.py           # Main token harvester (with proxy support)
+├── inject_to_9router.py   # Auto-inject to 9Router dashboard
+├── akun.txt               # Your accounts (create this)
+├── akun_example.txt       # Example with proxy configs
+├── cf_keys.txt            # Harvested tokens (auto-generated)
+├── requirements.txt       # Python dependencies
+├── LICENSE                # MIT License
+└── .gitignore             # Ignore sensitive files
+```
+
+---
+
+## ❓ FAQ
+
+**Q: Can I use datacenter proxy?**
+A: Yes, but residential is safer for 20+ accounts. Datacenter may work for < 20 accounts.
+
+**Q: Do I need different proxy per account?**
+A: Recommended but not required. Different proxy per account = more stealth.
+
+**Q: What if proxy is slow?**
+A: Increase `--delay` flag. Proxy adds latency to each request.
+
+**Q: Can I mix accounts with and without proxy?**
+A: Yes! Add proxy to `akun.txt` only for accounts that need it.
+
+**Q: How to rotate IPs automatically?**
+A: Use session-based proxy format: `socks5://user-session1:pass@host:port`
+
+---
+
+**Built by [Bayu5677](https://github.com/Bayu5677)**
