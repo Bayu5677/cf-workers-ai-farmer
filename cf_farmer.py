@@ -80,6 +80,7 @@ def mk_browser(index, proxy=None):
     
     # Add proxy if provided
     if proxy:
+        # Use Chrome --proxy-server flag directly (DrissionPage doesn't support SOCKS5 natively)
         co.set_argument(f"--proxy-server={proxy}")
         print(f"    Proxy: {proxy[:40]}...")
     
