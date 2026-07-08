@@ -56,17 +56,24 @@ user3@gmail.com|SecurePass789|socks5://proxy_user:proxy_pass@sg.1024proxy.io:108
 ### Step 2: Farm Tokens
 
 ```bash
+# Clone repo dulu
+git clone https://github.com/Bayu5677/cf-workers-ai-farmer.git
+cd cf-workers-ai-farmer
+
+# Buat akun.txt (isi email|password|proxy)
+nano akun.txt
+
 # Run with xvfb for headless display
-xvfb-run python3 cf_farmer.py
+xvfb-run -a python3 cf_farmer.py
 
 # Or run single account for testing
-xvfb-run python3 cf_farmer.py --only user1@gmail.com
+xvfb-run -a python3 cf_farmer.py --only user1@gmail.com
 
 # Custom delay between accounts (default: 10s)
-xvfb-run python3 cf_farmer.py --delay 15
+xvfb-run -a python3 cf_farmer.py --delay 15
 
 # Run WITHOUT proxy (ignore proxy in akun.txt)
-xvfb-run python3 cf_farmer.py --no-proxy
+xvfb-run -a python3 cf_farmer.py --no-proxy
 ```
 
 **Output:** `cf_keys.txt` with harvested tokens:
