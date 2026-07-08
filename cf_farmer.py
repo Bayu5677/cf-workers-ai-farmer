@@ -72,6 +72,8 @@ def mk_browser(index, proxy=None):
     co.set_argument("--disable-setuid-sandbox")
     co.set_argument("--disable-gpu")
     co.set_argument("--disable-dev-shm-usage")
+    co.set_argument("--disable-crash-reporter")
+    co.set_argument("--disable-breakpad")
     co.set_argument("--window-size=1366,768")
     co.set_argument(f"--user-data-dir={profile}")
     co.set_local_port(9200 + index)
