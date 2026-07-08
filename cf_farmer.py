@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-Cloudflare Workers AI Token Farmer
-===================================
+Cloudflare Workers AI Token Farmer (with Proxy Support)
+========================================================
 Automatically creates CF API tokens with Workers AI permissions
 using Google OAuth login (Gmail accounts).
 
@@ -12,11 +12,17 @@ Requirements:
 - Google Chrome: apt install google-chrome-stable
 
 Usage:
-- Prepare akun.txt: email|password (one per line)
+- Prepare akun.txt: email|password|proxy (one per line)
 - Run: xvfb-run python3 cf_farmer.py
+
+Proxy formats supported:
+- socks5://user:pass@host:port
+- http://user:pass@host:port
+- socks5://host:port (no auth)
+- host:port:user:pass (legacy format)
 """
 from DrissionPage import ChromiumPage, ChromiumOptions
-import time, json, random, shutil, argparse
+import time, json, random, shutil, argparse, re
 from pathlib import Path
 
 SCRIPT_DIR = Path(__file__).resolve().parent
@@ -32,7 +38,31 @@ def hd(lo=1.0, hi=3.0):
     time.sleep(random.uniform(lo, hi))
 
 
-def mk_browser(index):
+def parse_proxy(raw):
+    """Convert various proxy formats to Chrome --proxy-server format"""
+    if not raw or raw.strip() == "" or raw.strip() == "-":
+        return None
+    
+    raw = raw.strip()
+    
+    # Format: socks5://user:pass@host:port or http://user:pass@host:port
+    if raw.startswith(("socks5://", "socks4://", "http://", "https://")):
+        return raw
+    
+    # Format: host:port:user:pass (legacy)
+    parts = raw.split(":")
+    if len(parts) == 4:
+        host, port, user, password = parts
+        return f"socks5://{user}:{password}@{host}:{port}"
+    
+    # Format: host:port (no auth)
+    if len(parts) == 2:
+        return f"socks5://{raw}"
+    
+    return raw  # fallback: use as-is
+
+
+def mk_browser(index, proxy=None):
     profile = SCRIPT_DIR / f".profile_{index}"
     profile.mkdir(exist_ok=True)
     co = ChromiumOptions()
@@ -44,6 +74,12 @@ def mk_browser(index):
     co.set_argument("--window-size=1366,768")
     co.set_argument(f"--user-data-dir={profile}")
     co.set_local_port(9200 + index)
+    
+    # Add proxy if provided
+    if proxy:
+        co.set_argument(f"--proxy-server={proxy}")
+        print(f"    Proxy: {proxy[:40]}...")
+    
     return ChromiumPage(co), profile
 
 
@@ -51,11 +87,14 @@ def js_click(page, sel):
     return page.run_js(f"""var el=document.querySelector('{sel}');if(el){{el.dispatchEvent(new MouseEvent('click',{{bubbles:true,cancelable:true,view:window}}));return true;}}return false;""")
 
 
-def harvest(email, password, index):
+def harvest(email, password, proxy_raw, index):
     print(f"\n{'='*50}")
     print(f" [{index+1}] {email}")
     print(f"{'='*50}")
-    page, profile = mk_browser(index)
+    
+    proxy = parse_proxy(proxy_raw)
+    page, profile = mk_browser(index, proxy)
+    
     try:
         # [1] CF login
         print(" [1] CF login...")
@@ -167,33 +206,68 @@ def harvest(email, password, index):
 
 
 def main():
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--only", help="Single email")
-    parser.add_argument("--delay", type=int, default=10)
+    parser = argparse.ArgumentParser(
+        description="Cloudflare Workers AI Token Farmer with Proxy Support",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  xvfb-run python3 cf_farmer.py                         # All accounts, no proxy
+  xvfb-run python3 cf_farmer.py --only user@gmail.com   # Single account
+  xvfb-run python3 cf_farmer.py --delay 15              # 15s delay between accounts
+  xvfb-run python3 cf_farmer.py --no-proxy              # Ignore proxy in akun.txt
+
+akun.txt format (with proxy):
+  user@gmail.com|password|socks5://user:pass@proxy:1080
+
+akun.txt format (no proxy):
+  user@gmail.com|password
+        """
+    )
+    parser.add_argument("--only", help="Single email to process")
+    parser.add_argument("--delay", type=int, default=10, help="Delay between accounts (seconds)")
+    parser.add_argument("--no-proxy", action="store_true", help="Ignore proxy settings in akun.txt")
     args = parser.parse_args()
+    
     accounts = []
     for line in AKUN_FILE.read_text().splitlines():
         line = line.strip()
         if not line or line.startswith("#"):
             continue
         parts = line.split("|")
-        acc = {"email": parts[0], "password": parts[1]}
+        if len(parts) < 2:
+            continue
+        acc = {
+            "email": parts[0].strip(),
+            "password": parts[1].strip(),
+            "proxy": parts[2].strip() if len(parts) > 2 and not args.no_proxy else None
+        }
         if args.only and acc["email"] != args.only:
             continue
         accounts.append(acc)
+    
     if not accounts:
-        print("No accounts!")
+        print("No accounts found in akun.txt!")
+        print("Format: email|password|proxy (one per line)")
         return
-    print(f"Total: {len(accounts)} accounts")
+    
+    # Count proxy vs non-proxy
+    with_proxy = sum(1 for a in accounts if a["proxy"])
+    print(f"\n📋 Total: {len(accounts)} accounts")
+    print(f"   With proxy: {with_proxy}")
+    print(f"   Without proxy: {len(accounts) - with_proxy}")
+    print(f"   Delay: {args.delay}s\n")
+    
     ok = 0
     for i, acc in enumerate(accounts):
-        if harvest(acc["email"], acc["password"], i):
+        if harvest(acc["email"], acc["password"], acc["proxy"], i):
             ok += 1
         if i < len(accounts) - 1:
             hd(args.delay, args.delay + 3)
+    
     print(f"\n{'='*50}")
     print(f" DONE: {ok}/{len(accounts)} succeeded")
     print(f"{'='*50}")
+    print(f"\n Output: {RESULT_FILE}")
 
 
 if __name__ == "__main__":

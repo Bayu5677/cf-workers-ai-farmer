@@ -1,7 +1,18 @@
 # Example accounts file for cf_farmer.py
-# Format: email|password (one per line)
+# Format: email|password|proxy (one per line)
 # Remove # to enable, edit with your actual credentials
 
+# === Without proxy (datacenter IP OK for < 20 accounts) ===
 # user1@gmail.com|YourPassword123
 # user2@gmail.com|AnotherPass456
-# user3@gmail.com|SecurePass789
+
+# === With residential proxy (recommended for 20+ accounts) ===
+# user3@gmail.com|Pass123|socks5://proxy_user:proxy_pass@proxy1.example.com:1080
+# user4@gmail.com|Pass456|http://proxy_user:proxy_pass@proxy2.example.com:8080
+# user5@gmail.com|Pass789|socks5://proxy.example.com:1080
+
+# === Proxy formats supported ===
+# socks5://user:pass@host:port
+# http://user:pass@host:port
+# socks5://host:port (no auth)
+# host:port:user:pass (legacy format)
