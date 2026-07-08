@@ -67,6 +67,7 @@ def mk_browser(index, proxy=None):
     profile.mkdir(exist_ok=True)
     co = ChromiumOptions()
     co.set_browser_path("/usr/bin/google-chrome")
+    co.set_argument("--headless=new")
     co.set_argument("--no-sandbox")
     co.set_argument("--disable-setuid-sandbox")
     co.set_argument("--disable-gpu")
